@@ -161,7 +161,7 @@ pub fn get_files_changed<'repo>(
                 //store filename change in renames
                 // since it's a rename neiter paths can be empty
                 let new = new.unwrap();
-                renames.insert(old.unwrap(), new);
+                renames.insert(old.unwrap(), new.clone());
                 Some(new)
             }
             Delta::Modified => {
