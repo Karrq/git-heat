@@ -56,7 +56,7 @@ fn main() {
         }
     };
 
-    println!("Looking up changes from {} to {}", from, to);
+    eprintln!("Looking up changes from {} to {}", from, to);
 
     let commits =
         commits_in_date_range(from, to, &repo).expect("unable to retrieve commits in date range");
