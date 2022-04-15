@@ -14,3 +14,4 @@ rayon = "1.5.2"
 serde_json = "1.0.79"
 snafu = "0.7.0"
 time = { version = "0.3.9", features = ["parsing"] }
+two_timer = "2.2.3"

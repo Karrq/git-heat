@@ -4,7 +4,6 @@ use std::{collections::HashMap, path::PathBuf};
 use clap::Parser;
 use git2::Repository;
 use git_heat::*;
-use itertools::Itertools;
 use parking_lot::RwLock;
 use time::OffsetDateTime;
 
@@ -12,21 +11,19 @@ use rayon::prelude::*;
 
 #[derive(Parser)]
 struct Args {
-    #[clap(long, default_value = "")]
-    /// Lower bound of datetime range
+    /// Date range
     ///
-    /// Default: UNIX_EPOCH
-    from: String,
+    /// Specify in natural english
+    #[clap(last = true)]
+    date: Vec<String>,
 
-    #[clap(long, default_value = "")]
-    /// Upper bound of datetime range
-    ///
-    /// Default: Now
-    to: String,
-
-    #[clap(parse(from_os_str), default_value = ".")]
+    #[clap(long, parse(from_os_str), default_value = ".")]
     /// Path to repo to inspect
     repo: PathBuf,
+
+    /// Drop all changes < than min
+    #[clap(long, default_value = "0")]
+    min: u32,
 
     #[clap(long)]
     /// Format output as JSON
@@ -38,10 +35,28 @@ fn main() {
 
     let repo = Repository::open(args.repo).expect("not a valid git repo");
 
-    let format = time::format_description::parse("[year]-[month]-[day]").unwrap();
+    let (from, to) = {
+        let default = (OffsetDateTime::UNIX_EPOCH, OffsetDateTime::now_utc());
+        let datetime = args.date.join(" ");
+        let datetime = two_timer::parse(&datetime, None).ok();
 
-    let from = OffsetDateTime::parse(&args.from, &format).unwrap_or(OffsetDateTime::UNIX_EPOCH);
-    let to = OffsetDateTime::parse(&args.to, &format).unwrap_or_else(|_| OffsetDateTime::now_utc());
+        match datetime {
+            None => default,
+            Some((from, to, _)) => {
+                let from_ts = from.timestamp();
+                let to_ts = to.timestamp();
+                match (
+                    OffsetDateTime::from_unix_timestamp(from_ts),
+                    OffsetDateTime::from_unix_timestamp(to_ts),
+                ) {
+                    (Ok(from), Ok(to)) => ((from, to)),
+                    _ => default,
+                }
+            }
+        }
+    };
+
+    println!("Looking up changes from {} to {}", from, to);
 
     let commits =
         commits_in_date_range(from, to, &repo).expect("unable to retrieve commits in date range");
@@ -69,6 +84,7 @@ fn main() {
         .into_iter()
         .collect::<Vec<_>>();
 
+    changes.retain(|(_, v)| *v >= args.min);
     changes.sort_by_key(|(_, v)| -(*v as i64));
 
     if !args.json {
