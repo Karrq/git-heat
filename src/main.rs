@@ -1,18 +1,42 @@
 extern crate git_heat;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
+use clap::Parser;
 use git2::Repository;
 use git_heat::*;
 use time::OffsetDateTime;
 
-//TODO:
-// CLI: repository path
-//      date range
+#[derive(Parser)]
+struct Args {
+    #[clap(long, default_value = "")]
+    /// Lower bound of datetime range
+    ///
+    /// Default: UNIX_EPOCH
+    from: String,
+
+    #[clap(long, default_value = "")]
+    /// Upper bound of datetime range
+    ///
+    /// Default: Now
+    to: String,
+
+    #[clap(parse(from_os_str), default_value = ".")]
+    /// Path to repo to inspect
+    repo: PathBuf,
+}
+
 fn main() {
-    let repo = Repository::open(".").expect("not a valid git repo");
+    let args = Args::parse();
+
+    let repo = Repository::open(args.repo).expect("not a valid git repo");
+
+    let format = time::format_description::parse("[year]-[month]-[day]").unwrap();
+
+    let from = OffsetDateTime::parse(&args.from, &format).unwrap_or(OffsetDateTime::UNIX_EPOCH);
+    let to = OffsetDateTime::parse(&args.to, &format).unwrap_or_else(|_| OffsetDateTime::now_utc());
 
     let commits =
-        commits_in_date_range(OffsetDateTime::UNIX_EPOCH, OffsetDateTime::now_utc(), &repo)
+        commits_in_date_range(from, to, &repo)
             .expect("unable to retrieve commits in date range");
     let pairs = pair_commits(commits);
     let diffs = pairs.map(|(new, old)| {
