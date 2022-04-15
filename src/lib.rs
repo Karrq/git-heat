@@ -5,6 +5,7 @@ use std::{
 
 use git2::{Commit, Diff, DiffOptions, Repository, Time};
 use itertools::Itertools;
+use parking_lot::RwLock;
 use snafu::{Backtrace, Snafu};
 use time::{OffsetDateTime, UtcOffset};
 
@@ -133,14 +134,14 @@ pub fn get_diff_of_commits<'repo>(
 /// `renames` is a map for file renames, so the resulting map always contains the newest name
 pub fn get_files_changed<'repo>(
     diff: Diff<'repo>,
-    renames: &mut HashMap<PathBuf, PathBuf>,
+    renames: &RwLock<HashMap<PathBuf, PathBuf>>,
 ) -> HashMap<PathBuf, u32> {
     let mut changes = HashMap::new();
 
-    fn process_delta<'c, 'r, 'repo>(
+    fn process_delta<'repo>(
         delta: git2::DiffDelta<'repo>,
-        renames: &'r mut HashMap<PathBuf, PathBuf>,
-        changes: &'c mut HashMap<PathBuf, u32>,
+        renames: &RwLock<HashMap<PathBuf, PathBuf>>,
+        changes: &mut HashMap<PathBuf, u32>,
     ) {
         use git2::Delta;
 
@@ -161,7 +162,7 @@ pub fn get_files_changed<'repo>(
                 //store filename change in renames
                 // since it's a rename neiter paths can be empty
                 let new = new.unwrap();
-                renames.insert(old.unwrap(), new.clone());
+                renames.write().insert(old.unwrap(), new.clone());
                 Some(new)
             }
             Delta::Modified => {
@@ -171,6 +172,7 @@ pub fn get_files_changed<'repo>(
                 // we risk looking at "old" files that were later renamed
                 // so the renames should "carry" over the changes
                 let mut filename = old.unwrap();
+                let renames = renames.read();
                 while let Some(renamed) = renames.get(&filename) {
                     filename = renamed.clone();
                 }
